@@ -993,6 +993,24 @@
     dom.tabProd.addEventListener("click", function () { switchMode(true); });
 
     // ---- Paired cropping (auto-detect from loaded folders) -----------------
+    function _loadOneImage(folder, fileName, callback) {
+        // Load a single image from a folder, returns data URI via callback
+        if (!folder._isVirtual) {
+            fetch("/api/load_folder", { method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path: folder.path, names: [fileName] }) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { callback(d.status === "ok" && d.images.length ? d.images[0].uri : null); });
+        } else {
+            var entry = folder.files.find(function (x) { return x.name === fileName; });
+            if (!entry || !entry._entry) { callback(null); return; }
+            entry._entry.file(function (fl) {
+                var r = new FileReader();
+                r.onload = function (e) { callback(e.target.result); };
+                r.readAsDataURL(fl);
+            });
+        }
+    }
+
     function checkPairCropReady() {
         // Include both real and virtual folders, exclude results
         var realFolders = state.folders.filter(function (f) { return f.path.indexOf("[result]") !== 0; });
@@ -1004,25 +1022,54 @@
             state.pairFiles = [];
             return;
         }
-        var fA = realFolders[0], fB = realFolders[1];
-        var namesA = {}; fA.files.forEach(function (x) { namesA[x.name] = x; });
-        var namesB = {}; fB.files.forEach(function (x) { namesB[x.name] = x; });
-        var common = Object.keys(namesA).filter(function (n) { return namesB[n]; }).sort();
+        var f0 = realFolders[0], f1 = realFolders[1];
+        var names0 = {}; f0.files.forEach(function (x) { names0[x.name] = x; });
+        var names1 = {}; f1.files.forEach(function (x) { names1[x.name] = x; });
+        var common = Object.keys(names0).filter(function (n) { return names1[n]; }).sort();
         if (!common.length) {
-            dom.pairAutoStatus.innerHTML = '<span style=\"color:var(--accent);\">✗ ' + fA.name + ' 与 ' + fB.name + ' 无同名文件</span>';
+            dom.pairAutoStatus.innerHTML = '<span style=\"color:var(--accent);\">✗ ' + f0.name + ' 与 ' + f1.name + ' 无同名文件</span>';
             dom.pairNav.style.display = "none"; dom.btnPairCrop.style.display = "none";
             state.pairFiles = [];
             return;
         }
-        state.pairLqDir = fA.path; state.pairHqDir = fB.path;
-        state.pairFiles = common.map(function (n) { return { name: n, lq_path: namesA[n].path, hq_path: namesB[n].path, lq_uri: null, hq_uri: null }; });
-        state.pairIdx = 0;
-        state.pairScale = parseInt(dom.pairScale.value) || 2;
-        state.pairFolderA = fA; state.pairFolderB = fB;
-        dom.pairAutoStatus.innerHTML = '<span style=\"color:var(--green);\">✓ 配对成功: ' + common.length + ' 对 (' + fA.name + ' ↔ ' + fB.name + ')</span>';
-        dom.pairNav.style.display = ""; dom.btnPairCrop.style.display = "";
-        dom.pairInfo.textContent = common.length + " 对";
-        loadPairImage(0);
+        // Load first pair to detect which folder is HQ (larger) vs LQ (smaller)
+        dom.pairAutoStatus.innerHTML = '<span style=\"color:var(--text-dim);\">检测图像分辨率...</span>';
+        var pending = 2, uri0 = null, uri1 = null;
+        function bothLoaded() {
+            if (--pending) return;
+            if (!uri0 || !uri1) { dom.pairAutoStatus.innerHTML = '<span style=\"color:var(--warn);\">无法加载图像</span>'; return; }
+            var img0 = new Image(), img1 = new Image(), loaded = 0;
+            function dimsReady() {
+                if (++loaded < 2) return;
+                var w0 = img0.naturalWidth, h0 = img0.naturalHeight;
+                var w1 = img1.naturalWidth, h1 = img1.naturalHeight;
+                var area0 = w0 * h0, area1 = w1 * h1;
+                // Larger image = HQ, smaller = LQ
+                var hqFolder, lqFolder, hqNames, lqNames;
+                if (area0 >= area1) {
+                    hqFolder = f0; lqFolder = f1; hqNames = names0; lqNames = names1;
+                    state.pairScale = Math.round(w0 / w1);
+                } else {
+                    hqFolder = f1; lqFolder = f0; hqNames = names1; lqNames = names0;
+                    state.pairScale = Math.round(w1 / w0);
+                }
+                dom.pairScale.value = state.pairScale;
+                state.pairLqDir = lqFolder.path; state.pairHqDir = hqFolder.path;
+                state.pairFolderA = lqFolder; state.pairFolderB = hqFolder;
+                state.pairFiles = common.map(function (n) {
+                    return { name: n, lq_path: lqNames[n].path, hq_path: hqNames[n].path, lq_uri: null, hq_uri: null };
+                });
+                state.pairIdx = 0;
+                dom.pairAutoStatus.innerHTML = '<span style=\"color:var(--green);\">✓ 配对成功: ' + common.length + ' 对 | HQ: ' + hqFolder.name + ' (' + Math.max(w0,w1) + '×' + Math.max(h0,h1) + ') | LQ: ' + lqFolder.name + ' (' + Math.min(w0,w1) + '×' + Math.min(h0,h1) + ') | scale=' + state.pairScale + '×</span>';
+                dom.pairNav.style.display = ""; dom.btnPairCrop.style.display = "";
+                dom.pairInfo.textContent = common.length + " 对";
+                loadPairImage(0);
+            }
+            img0.onload = dimsReady; img1.onload = dimsReady;
+            img0.src = uri0; img1.src = uri1;
+        }
+        _loadOneImage(f0, common[0], function (u) { uri0 = u; bothLoaded(); });
+        _loadOneImage(f1, common[0], function (u) { uri1 = u; bothLoaded(); });
     }
 
     // Highlight paired thumbnail when image is selected
@@ -1077,18 +1124,18 @@
         var entryA = fA.files.find(function (x) { return x.name === p.name; });
         var entryB = fB.files.find(function (x) { return x.name === p.name; });
 
-        // Load HQ (folder B) first
+        // Load HQ (folder B, always the larger image) into main panel
         loadFromFolder(fB, entryB, function (uriB) {
             if (!uriB) return;
             p.hq_uri = uriB;
             state.activeFid = fB.id;
             state.pairCurrentName = p.name;
             dom.imgMain.src = p.hq_uri;
-            dom.mainTitle.textContent = fB.name + ": " + p.name + "  |  " + fA.name + ": " + p.name;
+            dom.mainTitle.textContent = "HQ: " + fB.name + "/" + p.name + "  |  LQ: " + fA.name + "/" + p.name;
             dom.mainPanel.classList.add("has-image");
             dom.saveFilename.value = p.name;
             highlightPairThumb();
-            // Load LQ
+            // Load LQ (folder A) as reference for paired crop
             loadFromFolder(fA, entryA, function (uriA) {
                 if (uriA) p.lq_uri = uriA;
             });
