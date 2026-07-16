@@ -78,7 +78,7 @@
         pairIdx: 0, pairCurrentName: null,
         pairOutputDir: "",   // user-selected base output directory
         pairLabel: "",       // currently selected label
-        pairLabels: ["建筑", "植被", "道路", "人物/车辆", "文字/标志", "室内/混合"],
+        pairLabels: ["building", "vegetation", "road", "person_vehicle", "text_sign", "indoor"],
         pairCropCounts: {},  // "baseName_label" → next index
         pairLqImg: null,   // Image element for LQ inset
         viewState: {},     // {originalImageId: {viewing: "result", algoKey: "usm_sharp"}}
