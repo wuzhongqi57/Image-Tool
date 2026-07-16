@@ -109,6 +109,38 @@
     }
 
     // ---- Folder management -------------------------------------------------
+    /** Insert folder into state.folders sorted by image resolution (descending).
+     *  Loads one image to detect dimensions, stores _res, then calls callback. */
+    function insertFolderSorted(f, callback) {
+        function insert(res) {
+            f._res = res || 0;
+            // Insert at correct position: higher resolution first
+            var idx = 0;
+            for (; idx < state.folders.length; idx++) {
+                if ((state.folders[idx]._res || 0) < f._res) break;
+            }
+            state.folders.splice(idx, 0, f);
+            callback();
+        }
+        // If folder already has loaded images, use first one directly
+        if (f.images && f.images.length && f.images[0].uri) {
+            var img = new Image();
+            img.onload = function () { insert(img.naturalWidth * img.naturalHeight); };
+            img.onerror = function () { insert(0); };
+            img.src = f.images[0].uri;
+        } else if (f.files && f.files.length) {
+            _loadOneImage(f, f.files[0].name, function (uri) {
+                if (!uri) { insert(0); return; }
+                var img = new Image();
+                img.onload = function () { insert(img.naturalWidth * img.naturalHeight); };
+                img.onerror = function () { insert(0); };
+                img.src = uri;
+            });
+        } else {
+            insert(0);
+        }
+    }
+
     function addFolderByPath(path) {
         var norm = path.replace(/\//g, "\\").replace(/\\+$/, "");
         // Dedup
@@ -128,10 +160,11 @@
                 files: data.files.sort(function (a, b) { return a.name.localeCompare(b.name); }), totalCount: data.total,
                 images: [], page: 0, pageSize: PAGE_SIZE,
             };
-            state.folders.push(f);
-            dom.noData.style.display = "none"; dom.workspace.style.display = "";
-            buildAllStrips();  // show placeholders immediately
-            loadFolderPage(f.id, 0);  // auto-load first page
+            insertFolderSorted(f, function () {
+                dom.noData.style.display = "none"; dom.workspace.style.display = "";
+                buildAllStrips();
+                loadFolderPage(f.id, 0);
+            });
         })
         .catch(function (e) { setStatus("扫描失败: " + e.message, "error"); });
     }
@@ -783,11 +816,12 @@
                         files: imgs.map(function (x) { return { name: x.name, path: x.relativePath, _entry: x.entry }; }),
                         totalCount: imgs.length, images: [], page: 0, pageSize: PAGE_SIZE, _isVirtual: true,
                     };
-                    state.folders.push(f);
-                    dom.noData.style.display = "none"; dom.workspace.style.display = "";
-                    buildAllStrips();
-                    loadFolderPage(f.id, 0);  // auto-load first page
-                    setStatus("已扫描 " + f.name + ": " + f.totalCount + " 张", "ok");
+                    insertFolderSorted(f, function () {
+                        dom.noData.style.display = "none"; dom.workspace.style.display = "";
+                        buildAllStrips();
+                        loadFolderPage(f.id, 0);
+                        setStatus("已扫描 " + f.name + ": " + f.totalCount + " 张", "ok");
+                    });
                 }
             });
         });
@@ -834,11 +868,12 @@
         });
         function done() {
             var f = { id: fid(), path: "[拖拽]", name: "拖拽文件 (" + results.length + ")", files: [], totalCount: results.length, images: results, page: 0, pageSize: PAGE_SIZE };
-            state.folders.push(f);
-            dom.noData.style.display = "none"; dom.workspace.style.display = "";
-            buildAllStrips();
-            if (results.length > 0) showImage(results[0].id);
-            setStatus("已加载 " + results.length + " 张", "ok");
+            insertFolderSorted(f, function () {
+                dom.noData.style.display = "none"; dom.workspace.style.display = "";
+                buildAllStrips();
+                if (results.length > 0) showImage(results[0].id);
+                setStatus("已加载 " + results.length + " 张", "ok");
+            });
         }
     }
 
@@ -854,11 +889,12 @@
         });
         function done() {
             var f = { id: fid(), path: "[拖拽]", name: "拖拽 (" + results.length + ")", files: [], totalCount: results.length, images: results, page: 0, pageSize: PAGE_SIZE };
-            state.folders.push(f);
-            dom.noData.style.display = "none"; dom.workspace.style.display = "";
-            buildAllStrips();
-            if (results.length > 0) showImage(results[0].id);
-            setStatus("已加载 " + results.length + " 张", "ok");
+            insertFolderSorted(f, function () {
+                dom.noData.style.display = "none"; dom.workspace.style.display = "";
+                buildAllStrips();
+                if (results.length > 0) showImage(results[0].id);
+                setStatus("已加载 " + results.length + " 张", "ok");
+            });
         }
     }
 
@@ -1072,12 +1108,9 @@
                     return { name: n, lq_path: lqNames[n].path, hq_path: hqNames[n].path, lq_uri: null, hq_uri: null };
                 });
                 state.pairIdx = 0;
-                // Store resolution for folder sort and tag folders
+                // Store resolution for folder sort
                 hqFolder._res = Math.max(w0, w1) * Math.max(h0, h1);
                 lqFolder._res = Math.min(w0, w1) * Math.min(h0, h1);
-                // Sort folders by resolution descending (HQ first strip)
-                state.folders.sort(function (a, b) { return (b._res || 0) - (a._res || 0); });
-                buildAllStrips();
                 dom.pairAutoStatus.innerHTML = '<span style=\"color:var(--green);\">✓ 配对成功: ' + common.length + ' 对 | HQ: ' + hqFolder.name + ' (' + Math.max(w0,w1) + '×' + Math.max(h0,h1) + ') | LQ: ' + lqFolder.name + ' (' + Math.min(w0,w1) + '×' + Math.min(h0,h1) + ') | scale=' + state.pairScale + '×</span>';
                 dom.pairInfo.style.display = ""; dom.btnPairCrop.style.display = "";
                 dom.pairInfo.textContent = common.length + " 对";
