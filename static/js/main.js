@@ -55,7 +55,8 @@
         cropToggle:   $("#crop-toggle"), cropPanel: $("#crop-panel"),
         cropOverlay:  $("#crop-overlay"), cropBoxEl: $("#crop-box-el"),
         cropX: $("#crop-x"), cropY: $("#crop-y"), cropW: $("#crop-w"), cropH: $("#crop-h"),
-        cropAspectLock: $("#crop-aspect-lock"), cropBatchName: $("#crop-batch-name"), btnCropSave: $("#btn-crop-save"),
+        cropAspectLock: $("#crop-aspect-lock"), cropSizeLock: $("#crop-size-lock"),
+        cropBatchName: $("#crop-batch-name"), btnCropSave: $("#btn-crop-save"),
         statusBar:    $("#status-bar"),
     };
 
@@ -84,6 +85,7 @@
         viewState: {},     // {originalImageId: {viewing: "result", algoKey: "usm_sharp"}}
         cropMode: false, cropBox: { x:0, y:0, w:256, h:256 }, cropDragging: null, cropLastMouse: { x:0, y:0 },
         cropAspectLocked: false, cropAspectRatio: 1.0, cropInitDone: false,
+        cropSizeLocked: false, cropSizeW: 256, cropSizeH: 256,
         zoom: { scale:1, panX:0, panY:0, panning:false, lastX:0, lastY:0 },
     };
     var _nid = 0; function uid() { return "i" + (++_nid); }
@@ -922,7 +924,7 @@
     $("#zoom-fit").addEventListener("click", function () { state.zoom.scale = 1; state.zoom.panX = 0; state.zoom.panY = 0; applyZoom(); });
     wrap.addEventListener("wheel", function (e) { e.preventDefault(); state.zoom.scale = Math.max(0.25, Math.min(5, state.zoom.scale + (e.deltaY > 0 ? -0.15 : 0.15))); applyZoom(); }, { passive: false });
     wrap.addEventListener("mousedown", function (e) {
-        if (state.cropMode && e.target.closest("#crop-overlay")) return;
+        if (state.cropMode && e.target.closest("#crop-box-el")) return;  // crop box handles its own drag; click elsewhere = pan
         state.zoom.panning = true; state.zoom.lastX = e.clientX; state.zoom.lastY = e.clientY;
         wrap.classList.add("grabbing"); e.preventDefault();
     });
@@ -945,7 +947,11 @@
         var s = Math.min(256, Math.floor(Math.min(iw, ih) * 0.5));
         state.cropBox = { x: Math.floor((iw - s) / 2), y: Math.floor((ih - s) / 2), w: s, h: s };
         state.cropAspectLocked = true; dom.cropAspectLock.checked = true;
-        state.cropAspectRatio = 1.0; state.cropInitDone = true;
+        state.cropAspectRatio = 1.0;
+        state.cropSizeLocked = true; dom.cropSizeLock.checked = true;
+        dom.cropW.disabled = true; dom.cropH.disabled = true;
+        state.cropSizeW = s; state.cropSizeH = s;
+        state.cropInitDone = true;
     }
     function updateCropOverlay() {
         if (!hasImage() || !state.cropMode) return; if (!state.cropInitDone) initCropBox(); if (!state.cropInitDone) return;
@@ -962,7 +968,8 @@
     function clampCrop() {
         var iw = dom.imgMain.naturalWidth, ih = dom.imgMain.naturalHeight, cb = state.cropBox;
         cb.x = Math.max(0, Math.min(iw - 10, cb.x)); cb.y = Math.max(0, Math.min(ih - 10, cb.y));
-        cb.w = Math.max(10, Math.min(iw - cb.x, cb.w)); cb.h = Math.max(10, Math.min(ih - cb.y, cb.h));
+        if (state.cropSizeLocked) { cb.w = state.cropSizeW; cb.h = state.cropSizeH; }
+        else { cb.w = Math.max(10, Math.min(iw - cb.x, cb.w)); cb.h = Math.max(10, Math.min(ih - cb.y, cb.h)); }
         if (state.cropAspectLocked) { cb.h = Math.round(cb.w / state.cropAspectRatio); if (cb.y + cb.h > ih) { cb.h = ih - cb.y; cb.w = Math.round(cb.h * state.cropAspectRatio); } }
     }
     function toggleCrop(f) { state.cropMode = f !== undefined ? f : !state.cropMode; if (state.cropMode) { if (!hasImage()) { state.cropMode = false; return; } dom.cropOverlay.style.display = ""; dom.cropPanel.style.display = ""; dom.cropToggle.classList.add("active-crop"); state.cropInitDone = false; initCropBox(); updateCropOverlay(); } else { dom.cropOverlay.style.display = "none"; dom.cropPanel.style.display = "none"; dom.cropToggle.classList.remove("active-crop"); } }
@@ -976,6 +983,7 @@
         var dx = (e.clientX - state.cropLastMouse.x) / tsx, dy = (e.clientY - state.cropLastMouse.y) / tsy;
         state.cropLastMouse = { x: e.clientX, y: e.clientY };
         var cb = state.cropBox, d = state.cropDragging;
+        if (state.cropSizeLocked && d !== "move") return;  // size locked: only move allowed
         if (d === "move") { cb.x = Math.max(0, Math.min(iw - cb.w, cb.x + dx)); cb.y = Math.max(0, Math.min(ih - cb.h, cb.y + dy)); }
         else if (d === "se") { cb.w = Math.max(10, Math.min(iw - cb.x, cb.w + dx)); cb.h = Math.max(10, Math.min(ih - cb.y, cb.h + dy)); }
         else if (d === "sw") { var w1 = Math.max(10, Math.min(cb.x + cb.w, cb.w - dx)); cb.x += cb.w - w1; cb.w = w1; cb.h = Math.max(10, Math.min(ih - cb.y, cb.h + dy)); }
@@ -994,7 +1002,13 @@
             if (domBrowse.modal && domBrowse.modal.style.display !== "none") { closeBrowser(); return; }
         } });
     dom.cropAspectLock.addEventListener("change", function () { state.cropAspectLocked = dom.cropAspectLock.checked; if (state.cropAspectLocked) { state.cropAspectRatio = state.cropBox.w / state.cropBox.h; clampCrop(); updateCropOverlay(); } });
-    function ciCb() { var cb = state.cropBox; cb.x = parseInt(dom.cropX.value) || 0; cb.y = parseInt(dom.cropY.value) || 0; cb.w = parseInt(dom.cropW.value) || 10; cb.h = parseInt(dom.cropH.value) || 10; clampCrop(); updateCropOverlay(); }
+    dom.cropSizeLock.addEventListener("change", function () {
+        state.cropSizeLocked = dom.cropSizeLock.checked;
+        if (state.cropSizeLocked) { state.cropSizeW = state.cropBox.w; state.cropSizeH = state.cropBox.h; }
+        dom.cropW.disabled = state.cropSizeLocked; dom.cropH.disabled = state.cropSizeLocked;
+        clampCrop(); updateCropOverlay();
+    });
+    function ciCb() { var cb = state.cropBox; cb.x = parseInt(dom.cropX.value) || 0; cb.y = parseInt(dom.cropY.value) || 0; if (!state.cropSizeLocked) { cb.w = parseInt(dom.cropW.value) || 10; cb.h = parseInt(dom.cropH.value) || 10; } clampCrop(); updateCropOverlay(); }
     dom.cropX.addEventListener("change", ciCb); dom.cropY.addEventListener("change", ciCb); dom.cropW.addEventListener("change", ciCb); dom.cropH.addEventListener("change", ciCb);
     dom.btnCropSave.addEventListener("click", function () {
         if (!hasImage() || !state.cropMode) return;
