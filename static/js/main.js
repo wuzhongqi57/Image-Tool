@@ -78,7 +78,7 @@
         pairIdx: 0, pairCurrentName: null,
         pairOutputDir: "",   // user-selected base output directory
         pairLabel: "",       // currently selected label
-        pairLabels: [],      // list of labels created this session
+        pairLabels: ["建筑", "植被", "道路", "人物/车辆", "文字/标志", "室内/混合"],
         pairCropCounts: {},  // "baseName_label" → next index
         pairLqImg: null,   // Image element for LQ inset
         viewState: {},     // {originalImageId: {viewing: "result", algoKey: "usm_sharp"}}
@@ -1228,12 +1228,13 @@
             var uriLQ; try { uriLQ = cLQ.toDataURL("image/png"); } catch(e) { dom.pairStatus.textContent = "裁剪 LQ 失败"; return; }
             var pending = 2, ok = 0;
             function saved() { pending--; if (!pending) { dom.pairStatus.textContent = "✓ 已保存 " + saveName + " (HQ+LQ, #" + idx + ")"; } }
-            var saveBody = { batch_name: state.pairLabel, base_dir: outDir };
+            var hqBody = { batch_name: state.pairLabel + "/HQ", base_dir: outDir };
+            var lqBody = { batch_name: state.pairLabel + "/LQ", base_dir: outDir };
             fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(Object.assign({ image_data: uriHQ, filename: saveName + "_HQ.png" }, saveBody)) })
+                body: JSON.stringify(Object.assign({ image_data: uriHQ, filename: saveName + ".png" }, hqBody)) })
             .then(function (r) { return r.json(); }).then(function (d) { if (d.status === "ok") ok++; saved(); });
             fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(Object.assign({ image_data: uriLQ, filename: saveName + "_LQ.png" }, saveBody)) })
+                body: JSON.stringify(Object.assign({ image_data: uriLQ, filename: saveName + ".png" }, lqBody)) })
             .then(function (r) { return r.json(); }).then(function (d) { if (d.status === "ok") ok++; saved(); });
         };
         lqImg.onerror = function () { dom.pairStatus.textContent = "LQ 图像加载失败"; };
@@ -1286,5 +1287,6 @@
     dom.workspace.style.display = "none"; dom.noData.style.display = "";
     dom.saveFilename.value = "image.png"; dom.batchName.value = "saved"; dom.cropBatchName.value = "crops";
     switchMode(false);  // start in simulation mode
+    updateLabelDropdown();
     setStatus("就绪 — 输入文件夹路径加载，或拖拽文件夹/图片"); fetchAlgoSpecs();
 })();
