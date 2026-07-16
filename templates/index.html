@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Tool v5</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <header id="topbar">
+    <h1>Image Tool</h1>
+    <div id="mode-tabs">
+      <button id="mode-tab-sim" class="mode-tab active">🔬 模拟</button>
+      <button id="mode-tab-prod" class="mode-tab">🏭 生产</button>
+    </div>
+    <div id="load-area">
+      <input type="text" id="folder-path" placeholder="文件夹路径，或拖拽文件夹到此处...">
+      <button id="btn-browse-folder">📁 浏览</button>
+      <button id="btn-load-folder">加载</button>
+      <span id="drop-hint">支持拖拽多个文件夹或图片</span>
+    </div>
+  </header>
+
+  <div id="no-data">
+    <p>输入文件夹路径点击<em>加载</em>，或拖拽文件夹/图片到窗口。</p>
+    <p style="font-size:0.76rem;color:#667;">支持 PNG / BMP / JPG。首次仅扫描不加载，点击缩略图时才加载图片。</p>
+  </div>
+
+  <div id="workspace" style="display:none;">
+    <div id="main-row">
+      <aside id="sidebar">
+        <div class="side-section">
+          <label style="font-size:0.74rem;color:var(--text-dim);">算法</label>
+          <div style="display:flex;gap:4px;align-items:center;">
+            <select id="algo-select" style="flex:1;"></select>
+            <button id="btn-algo-info" title="算法说明" style="width:24px;height:24px;padding:0;font-size:0.75rem;font-weight:700;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:50%;cursor:pointer;flex-shrink:0;">?</button>
+          </div>
+          <div id="algo-params"></div>
+          <div style="display:flex;gap:4px;margin-top:4px;">
+            <button id="btn-add-pipeline" style="flex:1;font-size:0.7rem;padding:3px 6px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:3px;cursor:pointer;">＋ 加入流水线</button>
+            <button id="btn-clear-pipeline" style="flex:0;font-size:0.7rem;padding:3px 6px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:3px;cursor:pointer;display:none;">清空</button>
+          </div>
+          <div id="pipeline-list" style="margin-top:3px;"></div>
+          <button id="btn-run-algo">▶ 运行</button>
+          <div style="display:flex;gap:4px;margin-top:4px;">
+            <button id="btn-show-result" disabled style="flex:1;">运行结果</button>
+            <button id="btn-show-original" style="flex:1;">切回原图</button>
+          </div>
+          <div id="algo-info" style="font-size:0.66rem;color:var(--text-dim);margin-top:4px;min-height:1em;"></div>
+        </div>
+
+        <div class="side-section" id="crop-panel" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="font-size:0.78rem;font-weight:600;color:var(--accent);">✂ 裁剪</span>
+            <label style="font-size:0.68rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer;">
+              <input type="checkbox" id="crop-aspect-lock"> 锁定比例
+            </label>
+          </div>
+          <div class="crop-inputs-row">
+            <label>X <input type="number" id="crop-x" step="1" min="0"></label>
+            <label>Y <input type="number" id="crop-y" step="1" min="0"></label>
+          </div>
+          <div class="crop-inputs-row">
+            <label>W <input type="number" id="crop-w" step="1" min="10"></label>
+            <label>H <input type="number" id="crop-h" step="1" min="10"></label>
+          </div>
+          <div style="font-size:0.66rem;color:var(--text-dim);margin:4px 0;">
+            拖拽移动 · ↑↓←→ 微调 (Shift+10px)
+          </div>
+          <label style="margin-top:4px;">保存目录
+            <input type="text" id="crop-batch-name" placeholder="crops"
+                   style="width:100%;margin-top:2px;padding:4px 6px;font-size:0.78rem;
+                          background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px;font-family:Consolas,monospace;">
+          </label>
+          <button id="btn-crop-save">💾 裁剪并保存</button>
+        </div>
+
+        <div class="side-section" style="display:none;">
+          <label style="font-size:0.74rem;color:var(--text-dim);margin-bottom:4px;">批量处理</label>
+          <div style="display:flex;gap:3px;margin-bottom:3px;">
+            <select id="batch-preset" style="flex:1;font-size:0.72rem;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 4px;">
+              <option value="">-- 选择预设 --</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:3px;margin-bottom:3px;">
+            <input type="text" id="batch-src-dir" placeholder="源文件夹" style="flex:1;font-size:0.7rem;padding:3px 4px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px;font-family:Consolas,monospace;">
+            <button class="btn-browse-dir" title="浏览" style="font-size:0.7rem;padding:3px 6px;flex-shrink:0;">📁</button>
+          </div>
+          <div style="display:flex;gap:3px;margin-bottom:3px;">
+            <input type="text" id="batch-dst-dir" placeholder="导出目录" style="flex:1;font-size:0.7rem;padding:3px 4px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px;font-family:Consolas,monospace;">
+            <button class="btn-browse-dir" title="浏览" style="font-size:0.7rem;padding:3px 6px;flex-shrink:0;">📁</button>
+          </div>
+          <button id="btn-batch-run" style="width:100%;padding:5px;font-size:0.78rem;background:var(--accent);border-color:var(--accent);color:#fff;border-radius:var(--radius);cursor:pointer;font-weight:600;">▶ 批量处理</button>
+          <div id="batch-status" style="font-size:0.66rem;color:var(--text-dim);margin-top:3px;min-height:1em;"></div>
+        </div>
+
+        <!-- Production: paired cropping (auto-detects from loaded folders) -->
+        <div class="side-section" id="pair-crop-panel" style="display:none;">
+          <label style="font-size:0.74rem;color:var(--text-dim);margin-bottom:4px;">成对裁剪</label>
+          <div id="pair-auto-status" style="font-size:0.68rem;color:var(--text-dim);margin-bottom:4px;min-height:2.5em;">
+            加载两个文件夹后自动检测配对
+          </div>
+          <div style="display:flex;gap:4px;margin-bottom:3px;align-items:center;">
+            <span style="font-size:0.66rem;color:var(--text-dim);">Scale:</span>
+            <input type="number" id="pair-scale" value="2" min="1" max="8" step="1" style="width:40px;font-size:0.7rem;padding:2px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px;">
+            <span style="font-size:0.66rem;color:var(--text-dim);">× (HQ/LQ)</span>
+          </div>
+          <div id="pair-nav" style="display:none;align-items:center;gap:4px;margin-bottom:3px;font-size:0.7rem;">
+            <button id="btn-pair-prev" style="font-size:0.65rem;padding:2px 6px;">◀</button>
+            <span id="pair-info" style="color:var(--text-dim);flex:1;text-align:center;"></span>
+            <button id="btn-pair-next" style="font-size:0.65rem;padding:2px 6px;">▶</button>
+          </div>
+          <button id="btn-pair-crop" style="width:100%;padding:5px;font-size:0.78rem;background:var(--accent);border-color:var(--accent);color:#fff;border-radius:var(--radius);cursor:pointer;font-weight:600;display:none;">✂ 成对裁剪并保存</button>
+          <div id="pair-status" style="font-size:0.66rem;color:var(--text-dim);margin-top:3px;min-height:1em;"></div>
+        </div>
+
+        <div class="side-section side-actions">
+          <label>保存文件名 <input type="text" id="save-filename" placeholder="image.png"
+                 style="width:100%;margin-top:2px;padding:4px 6px;font-size:0.78rem;
+                        background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px;font-family:Consolas,monospace;"></label>
+          <label>保存目录 <input type="text" id="batch-name" placeholder="saved"
+                 style="width:100%;margin-top:2px;padding:4px 6px;font-size:0.78rem;
+                        background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px;font-family:Consolas,monospace;"></label>
+          <button id="btn-save">💾 保存当前视图</button>
+          <label style="margin-top:6px;">预设 <select id="preset-select"><option value="">-- 加载预设 --</option></select></label>
+          <button id="btn-preset-save">📌 保存预设</button>
+        </div>
+      </aside>
+
+      <main id="main-panel">
+        <div id="main-label">
+          <span id="main-title">点击缩略图查看大图</span>
+          <div class="zoom-controls">
+            <button id="crop-toggle" title="裁剪模式" style="color:var(--warn);">✂</button>
+            <button id="zoom-out" title="缩小">−</button>
+            <span id="zoom-pct">100%</span>
+            <button id="zoom-in" title="放大">+</button>
+            <button id="zoom-reset" title="1:1">1:1</button>
+            <button id="zoom-fit" title="适应窗口">Fit</button>
+          </div>
+          <span id="main-time"></span>
+        </div>
+        <div class="img-wrap-large" id="main-img-wrap">
+          <img id="img-main" src="" alt="Main view" draggable="false">
+          <div id="crop-overlay" style="display:none;">
+            <div class="crop-box" id="crop-box-el">
+              <div class="crop-handle nw" data-handle="nw"></div>
+              <div class="crop-handle ne" data-handle="ne"></div>
+              <div class="crop-handle sw" data-handle="sw"></div>
+              <div class="crop-handle se" data-handle="se"></div>
+              <div class="crop-handle n" data-handle="n"></div>
+              <div class="crop-handle s" data-handle="s"></div>
+              <div class="crop-handle e" data-handle="e"></div>
+              <div class="crop-handle w" data-handle="w"></div>
+            </div>
+          </div>
+          <div id="computing-overlay" style="display:none;">
+            <div class="spinner"></div><span>处理中...</span>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Multi-folder thumbnail strips -->
+    <div id="strips-container"></div>
+  </div>
+
+  <div id="status-bar">就绪</div>
+
+  <!-- Algorithm info modal -->
+  <div id="algo-info-modal" style="display:none;">
+    <div class="browse-overlay"></div>
+    <div class="browse-dialog" style="width:520px;">
+      <div class="browse-header">
+        <span id="algo-info-title">算法说明</span>
+        <button id="algo-info-close">&times;</button>
+      </div>
+      <div id="algo-info-body" style="padding:14px 18px;overflow-y:auto;max-height:55vh;font-size:0.82rem;line-height:1.6;color:var(--text);"></div>
+    </div>
+  </div>
+
+  <!-- Directory browser modal -->
+  <div id="browse-modal" style="display:none;">
+    <div class="browse-overlay"></div>
+    <div class="browse-dialog">
+      <div class="browse-header"><span>📁 选择文件夹</span><button id="browse-close">&times;</button></div>
+      <div class="browse-breadcrumbs" id="browse-crumbs"></div>
+      <div class="browse-list" id="browse-list"></div>
+      <div class="browse-footer"><span id="browse-selected">未选择目录</span><button id="browse-confirm" disabled>确认选择</button></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/main.js"></script>
+</body>
+</html>
