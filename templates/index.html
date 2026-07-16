@@ -103,13 +103,24 @@
           <div id="pair-auto-status" style="font-size:0.68rem;color:var(--text-dim);margin-bottom:4px;min-height:2.5em;">
             加载两个文件夹后自动检测配对
           </div>
+          <div style="display:flex;gap:3px;margin-bottom:3px;">
+            <input type="text" id="pair-out-dir" placeholder="输出根目录" style="flex:1;font-size:0.7rem;padding:3px 4px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px;font-family:Consolas,monospace;">
+            <button class="btn-browse-dir" id="btn-pair-out-browse" title="浏览" style="font-size:0.7rem;padding:3px 6px;flex-shrink:0;">📁</button>
+          </div>
           <div style="display:flex;gap:4px;margin-bottom:3px;align-items:center;">
             <span style="font-size:0.66rem;color:var(--text-dim);">Scale:</span>
             <input type="number" id="pair-scale" value="2" min="1" max="8" step="1" style="width:40px;font-size:0.7rem;padding:2px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px;">
             <span style="font-size:0.66rem;color:var(--text-dim);">× (HQ/LQ)</span>
           </div>
+          <div style="display:flex;gap:3px;margin-bottom:3px;align-items:center;">
+            <select id="pair-label-select" style="flex:1;font-size:0.7rem;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 4px;">
+              <option value="">-- 选择标签 --</option>
+            </select>
+            <input type="text" id="pair-label-input" placeholder="新标签" style="width:70px;font-size:0.7rem;padding:3px 4px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px;font-family:Consolas,monospace;">
+            <button id="btn-pair-label-add" style="font-size:0.7rem;padding:3px 6px;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:3px;cursor:pointer;">+</button>
+          </div>
           <div id="pair-info" style="font-size:0.7rem;color:var(--text-dim);text-align:center;margin-bottom:3px;display:none;"></div>
-          <button id="btn-pair-crop" style="width:100%;padding:5px;font-size:0.78rem;background:var(--accent);border-color:var(--accent);color:#fff;border-radius:var(--radius);cursor:pointer;font-weight:600;display:none;">✂ 成对裁剪并保存</button>
+          <button id="btn-pair-crop" style="width:100%;padding:5px;font-size:0.78rem;background:var(--accent);border-color:var(--accent);color:#fff;border-radius:var(--radius);cursor:pointer;font-weight:600;display:none;">✂ 裁剪并保存 (HQ+LQ)</button>
           <div id="pair-status" style="font-size:0.66rem;color:var(--text-dim);margin-top:3px;min-height:1em;"></div>
         </div>
 

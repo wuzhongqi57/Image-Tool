@@ -31,6 +31,9 @@
         pairAutoStatus: $("#pair-auto-status"),
         pairScale:      $("#pair-scale"),
         pairInfo:       $("#pair-info"), btnPairCrop: $("#btn-pair-crop"),
+        pairOutDir:     $("#pair-out-dir"), btnPairOutBrowse: $("#btn-pair-out-browse"),
+        pairLabelSelect:$("#pair-label-select"), pairLabelInput: $("#pair-label-input"),
+        btnPairLabelAdd:$("#btn-pair-label-add"),
         pairStatus:     $("#pair-status"),
         btnRunAlgo:   $("#btn-run-algo"),
         btnShowResult: $("#btn-show-result"),
@@ -73,6 +76,10 @@
         pairLqOut: "", pairHqOut: "",
         pairFiles: [],     // [{name, lq_uri, hq_uri, lq_path, hq_path}]
         pairIdx: 0, pairCurrentName: null,
+        pairOutputDir: "",   // user-selected base output directory
+        pairLabel: "",       // currently selected label
+        pairLabels: [],      // list of labels created this session
+        pairCropCounts: {},  // "baseName_label" → next index
         pairLqImg: null,   // Image element for LQ inset
         viewState: {},     // {originalImageId: {viewing: "result", algoKey: "usm_sharp"}}
         cropMode: false, cropBox: { x:0, y:0, w:256, h:256 }, cropDragging: null, cropLastMouse: { x:0, y:0 },
@@ -1194,34 +1201,85 @@
         if (!hasImage() || !state.cropMode) { dom.pairStatus.textContent = "请先点击 ✂ 进入裁剪模式"; return; }
         var p = state.pairFiles[state.pairIdx]; if (!p) return;
         if (!p.hq_uri || !p.lq_uri) { dom.pairStatus.textContent = "等待图像加载..."; return; }
-        // Verify by file name (data URIs don't compare reliably)
         if (!state.pairCurrentName || state.pairCurrentName !== p.name) { dom.pairStatus.textContent = "请先导航到当前配对"; return; }
+        var outDir = dom.pairOutDir.value.trim();
+        if (!outDir) { dom.pairStatus.textContent = "请先选择输出目录"; return; }
+        if (!state.pairLabel) { dom.pairStatus.textContent = "请先选择或创建标签"; return; }
 
         var cb = state.cropBox, scale = state.pairScale;
+        var baseName = p.name.replace(/\.[^.]+$/, "");
+        var countKey = baseName + "_" + state.pairLabel;
+        var idx = state.pairCropCounts[countKey] || 0;
+        var saveName = baseName + "_" + state.pairLabel + "_" + idx;
+        state.pairCropCounts[countKey] = idx + 1;
+
         // Crop HQ from main panel
         var cHQ = document.createElement("canvas"); cHQ.width = cb.w; cHQ.height = cb.h;
         cHQ.getContext("2d").drawImage(dom.imgMain, cb.x, cb.y, cb.w, cb.h, 0, 0, cb.w, cb.h);
         var uriHQ; try { uriHQ = cHQ.toDataURL("image/png"); } catch(e) { dom.pairStatus.textContent = "裁剪 HQ 失败"; return; }
 
-        // Crop LQ from stored URI (scaled down)
+        // Crop LQ from stored URI
         var cbLQ = { x: Math.round(cb.x / scale), y: Math.round(cb.y / scale), w: Math.round(cb.w / scale), h: Math.round(cb.h / scale) };
-        dom.pairStatus.textContent = "正在裁剪 " + p.name + "...";
+        dom.pairStatus.textContent = "正在保存 " + saveName + "...";
         var lqImg = new Image();
         lqImg.onload = function () {
             var cLQ = document.createElement("canvas"); cLQ.width = cbLQ.w; cLQ.height = cbLQ.h;
             cLQ.getContext("2d").drawImage(lqImg, cbLQ.x, cbLQ.y, cbLQ.w, cbLQ.h, 0, 0, cbLQ.w, cbLQ.h);
             var uriLQ; try { uriLQ = cLQ.toDataURL("image/png"); } catch(e) { dom.pairStatus.textContent = "裁剪 LQ 失败"; return; }
             var pending = 2, ok = 0;
-            function saved() { pending--; if (!pending) { dom.pairStatus.textContent = "✓ 已保存 " + p.name + " (HQ+LQ)"; } }
-            var hqOutDir = (state.pairFolderB ? state.pairFolderB.name : "HQ") + "_crop";
-            var lqOutDir = (state.pairFolderA ? state.pairFolderA.name : "LQ") + "_crop";
-            fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image_data: uriHQ, filename: p.name, batch_name: hqOutDir }) })
+            function saved() { pending--; if (!pending) { dom.pairStatus.textContent = "✓ 已保存 " + saveName + " (HQ+LQ, #" + idx + ")"; } }
+            var saveBody = { batch_name: state.pairLabel, base_dir: outDir };
+            fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(Object.assign({ image_data: uriHQ, filename: saveName + "_HQ.png" }, saveBody)) })
             .then(function (r) { return r.json(); }).then(function (d) { if (d.status === "ok") ok++; saved(); });
-            fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image_data: uriLQ, filename: p.name, batch_name: lqOutDir }) })
+            fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(Object.assign({ image_data: uriLQ, filename: saveName + "_LQ.png" }, saveBody)) })
             .then(function (r) { return r.json(); }).then(function (d) { if (d.status === "ok") ok++; saved(); });
         };
         lqImg.onerror = function () { dom.pairStatus.textContent = "LQ 图像加载失败"; };
         lqImg.src = p.lq_uri;
+    });
+
+    // ---- Label management ---------------------------------------------------
+    function updateLabelDropdown() {
+        var sel = dom.pairLabelSelect;
+        sel.innerHTML = '<option value="">-- 选择标签 --</option>';
+        state.pairLabels.forEach(function (l) {
+            var opt = document.createElement("option"); opt.value = l; opt.textContent = l;
+            if (l === state.pairLabel) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+
+    dom.btnPairLabelAdd.addEventListener("click", function () {
+        var label = dom.pairLabelInput.value.trim();
+        if (!label) return;
+        if (state.pairLabels.indexOf(label) < 0) {
+            state.pairLabels.push(label);
+            state.pairLabels.sort();
+        }
+        state.pairLabel = label;
+        updateLabelDropdown();
+        dom.pairLabelInput.value = "";
+        dom.pairStatus.textContent = "标签: " + label;
+    });
+
+    dom.pairLabelInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") dom.btnPairLabelAdd.click();
+    });
+
+    dom.pairLabelSelect.addEventListener("change", function () {
+        state.pairLabel = dom.pairLabelSelect.value;
+        if (state.pairLabel) dom.pairStatus.textContent = "标签: " + state.pairLabel;
+    });
+
+    // ---- Output dir browse --------------------------------------------------
+    dom.btnPairOutBrowse.addEventListener("click", function () {
+        openBrowser(dom.pairOutDir);
+    });
+
+    dom.pairOutDir.addEventListener("input", function () {
+        state.pairOutputDir = dom.pairOutDir.value.trim();
     });
 
     // ---- Init --------------------------------------------------------------

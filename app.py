@@ -589,7 +589,8 @@ def api_save():
         batch_name = "saved_" + datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_batch = "".join(c for c in batch_name if c.isalnum() or c in "_- ") or "default"
 
-    batch_dir = os.path.join(config.OUTPUT_DIR, safe_batch)
+    base_dir = data.get("base_dir", "").strip()
+    batch_dir = os.path.join(base_dir if base_dir else config.OUTPUT_DIR, safe_batch)
     os.makedirs(batch_dir, exist_ok=True)
     png_path = os.path.join(batch_dir, safe_fn)
     with open(png_path, "wb") as f:
