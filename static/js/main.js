@@ -78,7 +78,7 @@
         pairIdx: 0, pairCurrentName: null,
         pairOutputDir: "",   // user-selected base output directory
         pairLabel: "",       // currently selected label
-        pairLabels: ["building", "vegetation", "road", "person_vehicle", "text_sign", "indoor"],
+        pairLabels: ["building", "vegetation", "road", "person", "vehicle", "text", "sign", "indoor"],
         pairCropCounts: {},  // "baseName_label" → next index
         pairLqImg: null,   // Image element for LQ inset
         viewState: {},     // {originalImageId: {viewing: "result", algoKey: "usm_sharp"}}
