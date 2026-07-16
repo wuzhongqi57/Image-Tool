@@ -30,9 +30,7 @@
         pairCropPanel:  $("#pair-crop-panel"),
         pairAutoStatus: $("#pair-auto-status"),
         pairScale:      $("#pair-scale"),
-        pairNav:        $("#pair-nav"),
-        pairInfo:       $("#pair-info"), btnPairPrev: $("#btn-pair-prev"),
-        btnPairNext:    $("#btn-pair-next"), btnPairCrop: $("#btn-pair-crop"),
+        pairInfo:       $("#pair-info"), btnPairCrop: $("#btn-pair-crop"),
         pairStatus:     $("#pair-status"),
         btnRunAlgo:   $("#btn-run-algo"),
         btnShowResult: $("#btn-show-result"),
@@ -323,7 +321,8 @@
     function buildThumb(img) {
         var div = document.createElement("div");
         div.className = "thumb" + (img.isResult ? " result-thumb" : "");
-        div.setAttribute("data-iid", img.id);  // for highlight lookup
+        div.setAttribute("data-iid", img.id);
+        div.setAttribute("data-name", img.name);  // for paired highlight lookup
         // Checkbox only for multi-image algorithms, not for result images
         var algo = state.algorithms[state.activeAlgo];
         var multiSelect = algo && algo.n_images > 1 && !img.isResult;
@@ -340,7 +339,17 @@
         var wrap = document.createElement("div"); wrap.className = "thumb-img-wrap";
         if (img.uri) { var el = document.createElement("img"); el.src = img.uri; wrap.appendChild(el); }
         div.appendChild(lbl); div.appendChild(wrap);
-        div.addEventListener("click", function () { showImage(img.id); });
+        // Click: in paired mode, load both images; otherwise normal showImage
+        div.addEventListener("click", function () {
+            if (state.prodMode && state.pairFiles.length && !img.isResult) {
+                var found = findImage(img.id);
+                if (found && found.folder && (found.folder.id === state.pairFolderA?.id || found.folder.id === state.pairFolderB?.id)) {
+                    var pairIdx = state.pairFiles.findIndex(function (p) { return p.name === img.name; });
+                    if (pairIdx >= 0) { state.pairCurrentName = null; loadPairImage(pairIdx); return; }
+                }
+            }
+            showImage(img.id);
+        });
         return div;
     }
 
@@ -1015,7 +1024,8 @@
         // Include both real and virtual folders, exclude results
         var realFolders = state.folders.filter(function (f) { return f.path.indexOf("[result]") !== 0; });
         if (!state.prodMode || realFolders.length !== 2) {
-            dom.pairNav.style.display = "none"; dom.btnPairCrop.style.display = "none";
+            dom.btnPairCrop.style.display = "none";
+            dom.pairInfo.style.display = "none";
             dom.pairAutoStatus.innerHTML = realFolders.length === 0
                 ? '<span style=\"color:var(--text-dim);\">加载两个文件夹后自动检测配对</span>'
                 : '<span style=\"color:var(--warn);\">需要恰好 2 个文件夹 (当前 ' + realFolders.length + ' 个)</span>';
@@ -1028,7 +1038,8 @@
         var common = Object.keys(names0).filter(function (n) { return names1[n]; }).sort();
         if (!common.length) {
             dom.pairAutoStatus.innerHTML = '<span style=\"color:var(--accent);\">✗ ' + f0.name + ' 与 ' + f1.name + ' 无同名文件</span>';
-            dom.pairNav.style.display = "none"; dom.btnPairCrop.style.display = "none";
+            dom.btnPairCrop.style.display = "none";
+            dom.pairInfo.style.display = "none";
             state.pairFiles = [];
             return;
         }
@@ -1061,7 +1072,7 @@
                 });
                 state.pairIdx = 0;
                 dom.pairAutoStatus.innerHTML = '<span style=\"color:var(--green);\">✓ 配对成功: ' + common.length + ' 对 | HQ: ' + hqFolder.name + ' (' + Math.max(w0,w1) + '×' + Math.max(h0,h1) + ') | LQ: ' + lqFolder.name + ' (' + Math.min(w0,w1) + '×' + Math.min(h0,h1) + ') | scale=' + state.pairScale + '×</span>';
-                dom.pairNav.style.display = ""; dom.btnPairCrop.style.display = "";
+                dom.pairInfo.style.display = ""; dom.btnPairCrop.style.display = "";
                 dom.pairInfo.textContent = common.length + " 对";
                 loadPairImage(0);
             }
@@ -1072,22 +1083,13 @@
         _loadOneImage(f1, common[0], function (u) { uri1 = u; bothLoaded(); });
     }
 
-    // Highlight paired thumbnail when image is selected
+    // Highlight BOTH paired thumbnails (folder A and folder B) by filename
     function highlightPairThumb() {
         $$("#strips-container .thumb").forEach(function (el) { el.classList.remove("paired"); });
         if (!state.pairFolderA || !state.pairFolderB || !state.pairFiles.length) return;
-        // Both folders have images in matching order — highlight same index in the other folder
-        var otherFid = (state.activeFid === state.pairFolderB.id) ? state.pairFolderA.id : state.pairFolderB.id;
-        $$("#strips-container .folder-strip").forEach(function (strip) {
-            if (strip.getAttribute("data-fid") !== otherFid) return;
-            var thumbs = strip.querySelectorAll(".thumb");
-            // Offset within current page (10 per page)
-            var pairPage = Math.floor(state.pairIdx / PAGE_SIZE);
-            var pageStart = pairPage * PAGE_SIZE;
-            var pairOffset = state.pairIdx - pageStart;
-            if (pairOffset >= 0 && pairOffset < thumbs.length) {
-                thumbs[pairOffset].classList.add("paired");
-            }
+        var name = state.pairFiles[state.pairIdx].name;
+        $$("#strips-container .thumb").forEach(function (el) {
+            if (el.getAttribute("data-name") === name) el.classList.add("paired");
         });
     }
 
@@ -1100,6 +1102,7 @@
         state.pairIdx = idx;
         var p = state.pairFiles[idx];
         dom.pairInfo.textContent = (idx + 1) + "/" + state.pairFiles.length + "  " + p.name;
+        dom.pairInfo.style.display = "";
 
         function loadFromFolder(folder, fileEntry, callback) {
             // Server folder: load via API
@@ -1130,10 +1133,14 @@
             p.hq_uri = uriB;
             state.activeFid = fB.id;
             state.pairCurrentName = p.name;
+            // Set activeIid from HQ folder so highlightThumb finds it
+            var hqImg = fB.images.find(function (x) { return x.name === p.name; });
+            if (hqImg) state.activeIid = hqImg.id;
             dom.imgMain.src = p.hq_uri;
             dom.mainTitle.textContent = "HQ: " + fB.name + "/" + p.name + "  |  LQ: " + fA.name + "/" + p.name;
             dom.mainPanel.classList.add("has-image");
             dom.saveFilename.value = p.name;
+            highlightThumb();
             highlightPairThumb();
             // Load LQ (folder A) as reference for paired crop
             loadFromFolder(fA, entryA, function (uriA) {
@@ -1141,9 +1148,7 @@
             });
         });
     }
-
-    dom.btnPairPrev.addEventListener("click", function () { if (state.pairIdx > 0) { state.pairCurrentName = null; loadPairImage(state.pairIdx - 1); } });
-    dom.btnPairNext.addEventListener("click", function () { if (state.pairIdx < state.pairFiles.length - 1) { state.pairCurrentName = null; loadPairImage(state.pairIdx + 1); } });
+    // Pair navigation now handled by thumbnail clicks — see buildThumb()
 
     dom.btnPairCrop.addEventListener("click", function () {
         if (!hasImage() || !state.cropMode) { dom.pairStatus.textContent = "请先点击 ✂ 进入裁剪模式"; return; }
