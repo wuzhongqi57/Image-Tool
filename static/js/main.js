@@ -75,7 +75,7 @@
         pairIdx: 0, pairCurrentName: null,
         pairLqImg: null,   // Image element for LQ inset
         viewState: {},     // {originalImageId: {viewing: "result", algoKey: "usm_sharp"}}
-        cropMode: false, cropBox: { x:0, y:0, w:200, h:200 }, cropDragging: null, cropLastMouse: { x:0, y:0 },
+        cropMode: false, cropBox: { x:0, y:0, w:256, h:256 }, cropDragging: null, cropLastMouse: { x:0, y:0 },
         cropAspectLocked: false, cropAspectRatio: 1.0, cropInitDone: false,
         zoom: { scale:1, panX:0, panY:0, panning:false, lastX:0, lastY:0 },
     };
@@ -901,7 +901,8 @@
         var iw = dom.imgMain.naturalWidth, ih = dom.imgMain.naturalHeight; if (!iw || !ih) return;
         var s = Math.min(256, Math.floor(Math.min(iw, ih) * 0.5));
         state.cropBox = { x: Math.floor((iw - s) / 2), y: Math.floor((ih - s) / 2), w: s, h: s };
-        state.cropAspectLocked = false; dom.cropAspectLock.checked = false; state.cropInitDone = true;
+        state.cropAspectLocked = true; dom.cropAspectLock.checked = true;
+        state.cropAspectRatio = 1.0; state.cropInitDone = true;
     }
     function updateCropOverlay() {
         if (!hasImage() || !state.cropMode) return; if (!state.cropInitDone) initCropBox(); if (!state.cropInitDone) return;
@@ -1071,6 +1072,12 @@
                     return { name: n, lq_path: lqNames[n].path, hq_path: hqNames[n].path, lq_uri: null, hq_uri: null };
                 });
                 state.pairIdx = 0;
+                // Store resolution for folder sort and tag folders
+                hqFolder._res = Math.max(w0, w1) * Math.max(h0, h1);
+                lqFolder._res = Math.min(w0, w1) * Math.min(h0, h1);
+                // Sort folders by resolution descending (HQ first strip)
+                state.folders.sort(function (a, b) { return (b._res || 0) - (a._res || 0); });
+                buildAllStrips();
                 dom.pairAutoStatus.innerHTML = '<span style=\"color:var(--green);\">✓ 配对成功: ' + common.length + ' 对 | HQ: ' + hqFolder.name + ' (' + Math.max(w0,w1) + '×' + Math.max(h0,h1) + ') | LQ: ' + lqFolder.name + ' (' + Math.min(w0,w1) + '×' + Math.min(h0,h1) + ') | scale=' + state.pairScale + '×</span>';
                 dom.pairInfo.style.display = ""; dom.btnPairCrop.style.display = "";
                 dom.pairInfo.textContent = common.length + " 对";
