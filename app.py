@@ -235,6 +235,28 @@ ALGORITHMS = {
             },
         },
     },
+    # ---- 去噪算法 ----
+    "scunet_denoise": {
+        "group": "去噪", "label": "SCUNet 盲去噪", "n_images": 1,
+        "specs": [
+            {"id": "sigma", "label": "噪声等级 σ", "min": 0.0, "max": 50.0, "step": 1, "default": 25.0},
+        ],
+        "info": {
+            "about": (
+                "<p><b>SCUNet: Swin-Conv-UNet 盲去噪</b>（CVPR 2022）。"
+                "Swin Transformer + 卷积混合 U-Net，支持灰度/彩色图像盲去噪。</p>"
+                "<p><b>适用：</b>红外图像去噪、传感器噪声抑制、SR 预处理。</p>"
+                "<p><b>权重：</b>需下载 scunet_gray_15/25/50.pth 到 model_zoo/。</p>"
+            ),
+            "params": {
+                "sigma": (
+                    "<b>概念：</b>目标噪声等级（高斯噪声标准差）。<br>"
+                    "<b>作用：</b>控制去噪强度。σ=15 轻度去噪保留细节，σ=25 中度，σ=50 强去噪。<br>"
+                    "<b>调节：</b>默认 25。图像噪声较少时用 15，噪声较多时用 50。"
+                ),
+            },
+        },
+    },
     # ---- 多图算法 ----
     "alpha": {
         "group": "多图算法", "label": "Alpha 混合", "n_images": 2,
@@ -403,6 +425,65 @@ def api_load_folder():
     return jsonify({"status": "ok", "images": images})
 
 
+# ---------------------------------------------------------------------------
+# SCUNet blind denoising
+# ---------------------------------------------------------------------------
+_scunet_model = None
+_scunet_sigma = None
+
+MODEL_ZOO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "model_zoo")
+
+
+def _load_scunet(sigma: float):
+    """Lazy-load SCUNet for the requested sigma level (15, 25, or 50)."""
+    global _scunet_model, _scunet_sigma
+    import torch
+    from network_scunet import SCUNet
+
+    # Snap sigma to nearest available weight
+    snap = min([15, 25, 50], key=lambda x: abs(x - sigma))
+    if _scunet_model is not None and _scunet_sigma == snap:
+        return _scunet_model
+
+    weight_path = os.path.join(MODEL_ZOO, f"scunet_gray_{snap}.pth")
+    if not os.path.exists(weight_path):
+        raise FileNotFoundError(
+            f"SCUNet weight not found: {weight_path}\n"
+            f"Download from https://github.com/cszn/KAIR/releases/download/v1.0/scunet_gray_{snap}.pth"
+        )
+
+    _scunet_model = SCUNet(in_nc=1, config=[4, 4, 4, 4, 4, 4, 4], dim=64)
+    _scunet_model.load_state_dict(torch.load(weight_path, map_location="cpu", weights_only=False), strict=True)
+    _scunet_model.eval()
+    for p in _scunet_model.parameters():
+        p.requires_grad = False
+    _scunet_sigma = snap
+    return _scunet_model
+
+
+def _scunet_denoise(img: np.ndarray, sigma: float) -> np.ndarray:
+    """SCUNet denoising. img: uint8 (H,W) or (H,W,3)."""
+    import torch
+
+    is_gray = img.ndim == 2
+    if is_gray:
+        img_gray = img
+    else:
+        import cv2
+        img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+    model = _load_scunet(sigma)
+    t = torch.from_numpy(img_gray.astype(np.float32) / 255.0).unsqueeze(0).unsqueeze(0)
+    with torch.no_grad():
+        out = model(t)
+    out = out.squeeze().numpy()
+    out = np.clip(out * 255, 0, 255).astype(np.uint8)
+
+    if not is_gray:
+        out = np.stack([out, out, out], axis=-1)
+    return out
+
+
 def _run_single_algo(img: np.ndarray, algorithm: str, params: dict) -> np.ndarray:
     """Run one single-image algorithm. img: uint8 numpy array."""
     if algorithm == "usm_sharp":
@@ -438,6 +519,8 @@ def _run_single_algo(img: np.ndarray, algorithm: str, params: dict) -> np.ndarra
         ks = int(params.get("kernel_size", 5))
         if ks % 2 == 0: ks += 1
         return cv2.GaussianBlur(img, (ks, ks), float(params.get("sigma", 1.0)))
+    elif algorithm == "scunet_denoise":
+        return _scunet_denoise(img, sigma=float(params.get("sigma", 25.0)))
     else:
         raise ValueError(f"Unknown single-image algorithm: {algorithm}")
 
