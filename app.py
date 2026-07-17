@@ -238,9 +238,7 @@ ALGORITHMS = {
     # ---- 去噪算法 ----
     "scunet_denoise": {
         "group": "去噪", "label": "SCUNet 盲去噪", "n_images": 1,
-        "specs": [
-            {"id": "sigma", "label": "噪声等级 σ", "min": 0.0, "max": 50.0, "step": 1, "default": 25.0},
-        ],
+        "specs": [],
         "info": {
             "about": (
                 "<p><b>SCUNet: Swin-Conv-UNet 盲去噪</b>（CVPR 2022）。"
@@ -426,61 +424,58 @@ def api_load_folder():
 
 
 # ---------------------------------------------------------------------------
-# SCUNet blind denoising
+# SCUNet blind denoising (real-world model)
 # ---------------------------------------------------------------------------
 _scunet_model = None
-_scunet_sigma = None
 
 MODEL_ZOO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "model_zoo")
 
 
-def _load_scunet(sigma: float):
-    """Lazy-load SCUNet for the requested sigma level (15, 25, or 50)."""
-    global _scunet_model, _scunet_sigma
+def _load_scunet():
+    """Lazy-load SCUNet color real-world blind denoising model."""
+    global _scunet_model
     import torch
     from network_scunet import SCUNet
 
-    # Snap sigma to nearest available weight
-    snap = min([15, 25, 50], key=lambda x: abs(x - sigma))
-    if _scunet_model is not None and _scunet_sigma == snap:
+    if _scunet_model is not None:
         return _scunet_model
 
-    weight_path = os.path.join(MODEL_ZOO, f"scunet_gray_{snap}.pth")
+    weight_path = os.path.join(MODEL_ZOO, "scunet_color_real_psnr.pth")
     if not os.path.exists(weight_path):
         raise FileNotFoundError(
             f"SCUNet weight not found: {weight_path}\n"
-            f"Download from https://github.com/cszn/KAIR/releases/download/v1.0/scunet_gray_{snap}.pth"
+            "Download from https://github.com/cszn/KAIR/releases/download/v1.0/scunet_color_real_psnr.pth"
         )
 
-    _scunet_model = SCUNet(in_nc=1, config=[4, 4, 4, 4, 4, 4, 4], dim=64)
+    _scunet_model = SCUNet(in_nc=3, config=[4, 4, 4, 4, 4, 4, 4], dim=64)
     _scunet_model.load_state_dict(torch.load(weight_path, map_location="cpu", weights_only=False), strict=True)
     _scunet_model.eval()
     for p in _scunet_model.parameters():
         p.requires_grad = False
-    _scunet_sigma = snap
     return _scunet_model
 
 
 def _scunet_denoise(img: np.ndarray, sigma: float) -> np.ndarray:
-    """SCUNet denoising. img: uint8 (H,W) or (H,W,3)."""
+    """SCUNet blind real denoising. img: uint8 (H,W) or (H,W,3).
+    Uses color real-world model. Grayscale inputs are replicated to 3 channels.
+    sigma is ignored (blind model handles noise level automatically)."""
     import torch
 
     is_gray = img.ndim == 2
     if is_gray:
-        img_gray = img
+        img_rgb = np.stack([img, img, img], axis=-1)
     else:
-        import cv2
-        img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        img_rgb = img
 
-    model = _load_scunet(sigma)
-    t = torch.from_numpy(img_gray.astype(np.float32) / 255.0).unsqueeze(0).unsqueeze(0)
+    model = _load_scunet()
+    t = torch.from_numpy(img_rgb.astype(np.float32) / 255.0).permute(2, 0, 1).unsqueeze(0)
     with torch.no_grad():
         out = model(t)
-    out = out.squeeze().numpy()
+    out = out.squeeze().permute(1, 2, 0).numpy()
     out = np.clip(out * 255, 0, 255).astype(np.uint8)
 
-    if not is_gray:
-        out = np.stack([out, out, out], axis=-1)
+    if is_gray:
+        out = out[:, :, 0]  # back to grayscale
     return out
 
 
