@@ -918,11 +918,11 @@
         var p = $("#zoom-pct"); if (p) p.textContent = Math.round(state.zoom.scale * 100) + "%";
         if (state.cropMode) updateCropOverlay();
     }
-    $("#zoom-in").addEventListener("click", function () { state.zoom.scale = Math.min(5, state.zoom.scale + 0.25); applyZoom(); });
+    $("#zoom-in").addEventListener("click", function () { state.zoom.scale = Math.min(10, state.zoom.scale + 0.25); applyZoom(); });
     $("#zoom-out").addEventListener("click", function () { state.zoom.scale = Math.max(0.25, state.zoom.scale - 0.25); applyZoom(); });
     $("#zoom-reset").addEventListener("click", function () { state.zoom.scale = 1; state.zoom.panX = 0; state.zoom.panY = 0; applyZoom(); });
     $("#zoom-fit").addEventListener("click", function () { state.zoom.scale = 1; state.zoom.panX = 0; state.zoom.panY = 0; applyZoom(); });
-    wrap.addEventListener("wheel", function (e) { e.preventDefault(); state.zoom.scale = Math.max(0.25, Math.min(5, state.zoom.scale + (e.deltaY > 0 ? -0.15 : 0.15))); applyZoom(); }, { passive: false });
+    wrap.addEventListener("wheel", function (e) { e.preventDefault(); state.zoom.scale = Math.max(0.25, Math.min(10, state.zoom.scale + (e.deltaY > 0 ? -0.15 : 0.15))); applyZoom(); }, { passive: false });
     wrap.addEventListener("mousedown", function (e) {
         if (state.cropMode && e.target.closest("#crop-box-el")) return;  // crop box handles its own drag; click elsewhere = pan
         state.zoom.panning = true; state.zoom.lastX = e.clientX; state.zoom.lastY = e.clientY;
