@@ -235,6 +235,19 @@ ALGORITHMS = {
             },
         },
     },
+    # ---- 增强算法 ----
+    "hist_eq": {
+        "group": "增强", "label": "直方图均衡", "n_images": 1,
+        "specs": [],
+        "info": {
+            "about": (
+                "<p><b>全局直方图均衡化</b>。将图像灰度分布拉伸到 0-255 全范围，增强对比度。</p>"
+                "<p><b>适用：</b>红外低对比度增强、暗区提亮、全局对比度改善。</p>"
+                "<p><b>注意：</b>CLAHE 更适合局部对比度增强；直方图均衡为全局操作，可能放大噪声。</p>"
+            ),
+            "params": {},
+        },
+    },
     # ---- 去噪算法 ----
     "scunet_denoise": {
         "group": "去噪", "label": "SCUNet 盲去噪", "n_images": 1,
@@ -514,6 +527,11 @@ def _run_single_algo(img: np.ndarray, algorithm: str, params: dict) -> np.ndarra
         ks = int(params.get("kernel_size", 5))
         if ks % 2 == 0: ks += 1
         return cv2.GaussianBlur(img, (ks, ks), float(params.get("sigma", 1.0)))
+    elif algorithm == "hist_eq":
+        import cv2
+        gray = img if img.ndim == 2 else cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        eq = cv2.equalizeHist(gray)
+        return eq if img.ndim == 2 else np.stack([eq, eq, eq], axis=-1)
     elif algorithm == "scunet_denoise":
         return _scunet_denoise(img, sigma=float(params.get("sigma", 25.0)))
     else:

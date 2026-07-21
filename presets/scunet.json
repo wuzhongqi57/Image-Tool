@@ -1,0 +1,9 @@
+{
+  "pipeline": [
+    {
+      "algorithm": "scunet_denoise",
+      "params": {},
+      "label": "SCUNet \u76f2\u53bb\u566a"
+    }
+  ]
+}

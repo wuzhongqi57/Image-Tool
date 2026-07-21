@@ -1,0 +1,12 @@
+{
+  "pipeline": [
+    {
+      "algorithm": "clahe",
+      "params": {
+        "clip_limit": 1,
+        "tile_size": 8
+      },
+      "label": "CLAHE \u81ea\u9002\u5e94\u76f4\u65b9\u56fe\u5747\u8861"
+    }
+  ]
+}

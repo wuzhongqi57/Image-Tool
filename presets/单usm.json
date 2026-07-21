@@ -1,0 +1,13 @@
+{
+  "pipeline": [
+    {
+      "algorithm": "usm_sharp",
+      "params": {
+        "weight": 0.5,
+        "radius": 50,
+        "threshold": 10
+      },
+      "label": "USM \u9510\u5316"
+    }
+  ]
+}
